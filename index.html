@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Study &amp; Quiz</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#fafaf7;--fg:#1d1d1b;--mu:#6b6b66;--c:#fff;--b:#e3e1da;--ac:#3b5bdb;--ok:#2b8a3e;--no:#c92a2a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17171a;--fg:#ececea;--mu:#9a9a94;--c:#222226;--b:#35353b;--ac:#7c93ff;--ok:#69db7c;--no:#ff8787}}
+:root[data-theme="dark"]{--bg:#17171a;--fg:#ececea;--mu:#9a9a94;--c:#222226;--b:#35353b;--ac:#7c93ff;--ok:#69db7c;--no:#ff8787}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+#app{max-width:760px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:26px;margin:12px 0}
+.mu{color:var(--mu);font-size:14px}
+.card{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:14px 16px;margin:12px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin:8px 0}
+.row.l{justify-content:flex-start}
+button{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:9px 14px;font:inherit;cursor:pointer}
+button.g{background:transparent;color:var(--fg);border:1px solid var(--b)}
+input[type=text],input[type=number],textarea,select{background:var(--bg);color:var(--fg);border:1px solid var(--b);border-radius:8px;padding:8px;font:inherit;max-width:100%;box-sizing:border-box}
+input[type=text],textarea{flex:1;min-width:140px}textarea{width:100%}
+.o{display:block;border:1px solid var(--b);border-radius:8px;padding:8px 10px;margin:6px 0;cursor:pointer}
+.m{display:flex;gap:10px;align-items:center;justify-content:space-between;margin:6px 0;flex-wrap:wrap}
+.qn{float:right;color:var(--mu);font-size:13px}
+.fc{min-height:200px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:24px;cursor:pointer;padding:24px;user-select:none}
+.ok{color:var(--ok)}.no{color:var(--no)}
+.wr{cursor:pointer;border-left:4px solid var(--no)}.rt{border-left:4px solid var(--ok)}
+.tbl{overflow-x:auto}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid var(--b);padding:6px;text-align:left;font-size:14px;vertical-align:top}
+label.inl{margin-right:12px;white-space:nowrap}
+</style></head>
+<body><div id="app"></div>
+<script>
+const K="qz1";let P=[],S={v:"home"},cur=null,A0=null;
+try{P=JSON.parse(localStorage.getItem(K)||"[]")}catch(e){}
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(P))}catch(e){}};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const sh=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+const uid=()=>Math.random().toString(36).slice(2,9);
+const norm=s=>String(s).toLowerCase().replace(/\s+/g," ").trim();
+const $=s=>document.getElementById(s);
+const b64=u=>{let s="";u.forEach(b=>s+=String.fromCharCode(b));return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")};
+const unb64=t=>{t=t.replace(/-/g,"+").replace(/_/g,"/");while(t.length%4)t+="=";return Uint8Array.from(atob(t),c=>c.charCodeAt(0))};
+async function pack(o){let u=new TextEncoder().encode(JSON.stringify(o));if(window.CompressionStream){const s=new Blob([u]).stream().pipeThrough(new CompressionStream("deflate-raw"));return"z"+b64(new Uint8Array(await new Response(s).arrayBuffer()))}return"r"+b64(u)}
+async function unpack(t){let u=unb64(t.slice(1));if(t[0]==="z"){const s=new Blob([u]).stream().pipeThrough(new DecompressionStream("deflate-raw"));u=new Uint8Array(await new Response(s).arrayBuffer())}return JSON.parse(new TextDecoder().decode(u))}
+const rc=o=>"r"+b64(new TextEncoder().encode(JSON.stringify(o)));
+const enc=cards=>cards.map(c=>[c.t,c.d,...(c.x||[])]);
+const dec=a=>a.map(r=>({t:r[0],d:r[1],x:r.slice(2)}));
+
+function addRows(rows){let n=0;rows.forEach((r,i)=>{r=r.map(x=>String(x??"").trim());if(!r[0]||!r[1])return;if(i===0&&/^(term|word|question|front)/i.test(r[0])&&/^(def|meaning|answer|back)/i.test(r[1]))return;cur.cards.push({t:r[0],d:r[1],x:r.slice(2,5).filter(Boolean)});n++});save();S.msg=n?`Added ${n} card${n>1?"s":""}.`:"No valid rows found. Each row needs a term and a definition.";render()}
+function parsePaste(t){return t.split(/\r?\n/).filter(l=>l.trim()).map(l=>l.includes("\t")?l.split("\t"):l.includes(" - ")?l.split(" - "):l.split(","))}
+
+function build(cards,types,n){
+ const cs=sh(cards);n=Math.min(n,cs.length);const qs=[];
+ const ts=types.filter(t=>t==="wr"||(t==="ma"&&cs.length>=3)||((t==="mc"||t==="tf")&&cs.length>=2));if(!ts.length)ts.push("wr");
+ for(let i=0;i<n;i++){const c=cs[i],t=ts[i%ts.length],o=cs.filter(x=>x!==c);
+  if(t==="mc"){const rev=Math.random()<.5,a=rev?c.t:c.d;let pool=rev?o.map(x=>x.t):[...(c.x||[]),...sh(o.map(x=>x.d))];pool=[...new Set(pool.filter(x=>x&&x!==a))].slice(0,3);qs.push({k:"mc",p:rev?"Which term matches: "+c.d:"What is the definition of “"+c.t+"”?",a,opts:sh([a,...pool])})}
+  else if(t==="tf"){const tr=Math.random()<.5||!o.length,d=tr?c.d:sh(o)[0].d;qs.push({k:"tf",p:"True or false: “"+c.t+"” means “"+d+"”.",truth:tr,a:(tr?"True":"False")+(tr?"":" (correct definition: "+c.d+")")})}
+  else if(t==="wr")qs.push({k:"wr",p:"Type the term for: "+c.d,a:c.t});
+  else{const g=[c,...sh(o).slice(0,3)];qs.push({k:"ma",p:"Match each term with its definition.",L:g.map(x=>x.t),R:sh(g.map(x=>x.d)),a:g.map(x=>x.d)})}}
+ return qs}
+function qh(q,i){let b="";
+ if(q.k==="mc")b=q.opts.map((o,j)=>`<label class=o><input type=radio name=q${i} value=${j}> ${esc(o)}</label>`).join("");
+ else if(q.k==="tf")b=["True","False"].map(o=>`<label class=o><input type=radio name=q${i} value=${o}> ${o}</label>`).join("");
+ else if(q.k==="wr")b=`<input type=text name=q${i} autocomplete=off placeholder="Your answer">`;
+ else b=q.L.map((l,j)=>`<div class=m><span>${esc(l)}</span><select name=q${i}_${j}><option value="">Choose…</option>${q.R.map((r,k)=>`<option value=${k}>${esc(r)}</option>`).join("")}</select></div>`).join("");
+ return `<div class=card><span class=qn>${i+1}</span><p><b>${esc(q.p)}</b></p>${b}</div>`}
+function grade(q,i){const f=document.forms.qf,r=f.querySelector(`input[name=q${i}]:checked`);
+ if(q.k==="mc"){q.ans=r?q.opts[r.value]:"";q.ok=q.ans===q.a}
+ else if(q.k==="tf"){q.ans=r?r.value:"";q.ok=r&&(r.value==="True")===q.truth}
+ else if(q.k==="wr"){q.ans=f.elements["q"+i].value;q.ok=norm(q.ans)===norm(q.a)}
+ else{const v=q.L.map((_,j)=>f.elements["q"+i+"_"+j].value);q.ans=v.map((x,j)=>q.L[j]+" → "+(x===""?"—":q.R[x])).join("; ");q.ok=v.every((x,j)=>x!==""&&q.R[x]===q.a[j])}
+ q.ok=!!q.ok}
+const corr=q=>q.k==="ma"?q.L.map((l,j)=>l+" → "+q.a[j]).join("; "):q.a;
+
+const V={
+home(){return `<h1>Study sets</h1><p class=mu>Projects are saved in this browser only. Use a backup code to move or keep a copy.</p>`+
+ P.map(p=>`<div class="card row"><div><b>${esc(p.name)}</b><div class=mu>${p.cards.length} cards</div></div><div><button onclick="A('open','${p.id}')">Open</button> ${S.cd===p.id?`<button style="background:var(--no)" onclick="A('delok','${p.id}')">Yes, delete</button> <button class=g onclick="A('delno')">Cancel</button>`:`<button class=g onclick="A('del','${p.id}')">Delete</button>`}</div></div>`).join("")+
+ `<div class=card><b>New project</b><div class=row><input type=text id=np placeholder="Project name"><button onclick="A('new')">Create</button></div></div>
+ <div class=card><b>Restore from backup code</b><textarea id=rs rows=2></textarea><div class=row l><button class=g onclick="A('restore')">Restore</button></div></div>
+ <div class=row l><button class=g onclick="A('check')">Check student results</button></div>${S.msg?`<p class=no>${esc(S.msg)}</p>`:""}`},
+project(){const p=cur;return `<button class=g onclick="A('home')">← All projects</button><h1>${esc(p.name)}</h1>
+ <div class=card><b>Add content</b><p class=mu>Columns: A = Term, B = Definition, C–E = optional wrong answers for multiple choice. Paste rows copied from Excel or upload a file. New content is added to this project.</p>
+ <textarea id=pt rows=4 placeholder="Paste rows here (term, tab, definition)"></textarea>
+ <div class=row l><button onclick="A('paste')">Add pasted rows</button><input type=file id=fl accept=".xlsx,.xls,.csv" onchange="A('file',this)"></div>
+ <div class=row><input type=text id=t1 placeholder="Term"><input type=text id=d1 placeholder="Definition"><button class=g onclick="A('one')">Add card</button></div>${S.msg?`<p class=mu>${esc(S.msg)}</p>`:""}</div>
+ <div class="row l"><button onclick="A('study')">Study flashcards</button><button onclick="A('setup','quiz')">Take a quiz</button><button onclick="A('setup','assign')">Assign to students</button><button class=g onclick="A('bk')">Backup code</button></div>
+ ${S.out?`<textarea rows=3 readonly onclick="this.select()">${esc(S.out)}</textarea>`:""}
+ <div class="card tbl"><table><tr><th>Term</th><th>Definition</th><th></th></tr>${p.cards.map((c,i)=>`<tr><td>${esc(c.t)}</td><td>${esc(c.d)}${c.x&&c.x.length?`<div class=mu>Wrong: ${esc(c.x.join(" | "))}</div>`:""}</td><td><button class=g onclick="A('rm',${i})">×</button></td></tr>`).join("")||"<tr><td colspan=3 class=mu>No cards yet.</td></tr>"}</table></div>`},
+study(){const c=S.ord[S.i],cs=S.ord.length;return `<button class=g onclick="A('open','${cur.id}')">← Back</button><h1>Flashcards</h1><p class=mu>${S.i+1} / ${cs} · tap the card to flip</p>
+ <div class="card fc" onclick="A('flip')">${esc(S.fl?(S.rev?c.t:c.d):(S.rev?c.d:c.t))}</div>
+ <div class=row><button class=g onclick="A('prev')">← Prev</button><button class=g onclick="A('shuf')">Shuffle</button><button class=g onclick="A('rev')">${S.rev?"Show term first":"Show definition first"}</button><button onclick="A('next')">Next →</button></div>`},
+setup(){const as=S.mode==="assign",n=(A0?A0.c:cur.cards).length;return `<button class=g onclick="A('open','${cur.id}')">← Back</button><h1>${as?"Assign a quiz":"Quiz setup"}</h1><div class=card>
+ ${as?`<div class=row><input type=text id=ti placeholder="Assignment title" value="${esc(cur.name)}"></div>`:""}
+ <p><b>Question types</b></p><div>${[["mc","Multiple choice"],["tf","True / false"],["wr","Written"],["ma","Matching"]].map(([k,l])=>`<label class=inl><input type=checkbox id=ty_${k} checked> ${l}</label>`).join("")}</div>
+ <p><b>Maximum number of questions</b> (${n} cards available)</p><input type=number id=nq min=1 max=${n} value=${Math.min(10,n)}>
+ <div class=row l><button onclick="A('${as?"mk":"go"}')">${as?"Create link":"Start quiz"}</button></div></div>
+ ${as?`<div class=card><p class=mu>Paste the link of this app so the assignment link can be built from it.</p><input type=text id=bl placeholder="https://claude.ai/…" value="${esc(S.base||"")}"><div id=lk>${S.link?`<p><b>Send this link to students:</b></p><textarea rows=4 readonly onclick="this.select()">${esc(S.link)}</textarea>`:""}</div></div>`:""}`},
+quiz(){const L=S.redo?S.redo.map(i=>S.qs[i]):S.qs;return `<h1>${S.redo?"Redo questions":"Quiz"}</h1><form name=qf onsubmit="A('submit');return false">${L.map(qh).join("")}<div class=row l><button type=submit>Submit answers</button></div></form>`},
+res(){const q=S.qs,s=q.filter(x=>x.ok).length,w=q.map((x,i)=>x.ok?-1:i).filter(i=>i>=0);
+ return `<h1>Results: ${s} / ${q.length}</h1><p class=mu>${w.length?"Tap a question you missed to try it again.":"Perfect score!"}</p>`+
+ q.map((x,i)=>`<div class="card ${x.ok?"rt":"wr"}" ${x.ok?"":`onclick="A('redo',${i})"`}><b>${i+1}. ${esc(x.p)}</b><div class=${x.ok?"ok":"no"}>${x.ok?"Correct":"Incorrect"}${x.ans?" — your answer: "+esc(x.ans):""}</div>${x.ok?"":`<div class=mu>Answer: ${esc(corr(x))} · tap to redo</div>`}</div>`).join("")+
+ `<div class="row l">${w.length?`<button onclick="A('redoAll')">Redo all missed (${w.length})</button>`:""}<button class=g onclick="A('${A0?"stuHome":"open','"+cur.id}')">${A0?"Start over":"Back to project"}</button></div>`+
+ (A0?`<div class=card><b>Send this code to your teacher</b><textarea rows=3 readonly onclick="this.select()">${esc(rc({n:S.name,t:A0.n,s,m:q.length,w:w.map(i=>q[i].p.slice(0,60))}))}</textarea></div>`:"")},
+stuHome(){return `<h1>${esc(A0.n)}</h1><div class=card><p>${A0.c.length} cards · up to ${A0.m} questions</p><div class=row><input type=text id=nm placeholder="Your name" value="${esc(S.name||"")}"><button onclick="A('stuGo')">Start</button></div></div>`},
+check(){return `<button class=g onclick="A('home')">← Back</button><h1>Student results</h1><div class=card><p class=mu>Paste result codes from students, one per line.</p><textarea id=cd rows=5></textarea><div class="row l"><button onclick="A('readCodes')">Show results</button></div></div>`+
+ (S.rows?`<div class="card tbl"><table><tr><th>Student</th><th>Assignment</th><th>Score</th><th>Missed</th></tr>${S.rows.map(r=>`<tr><td>${esc(r.n)}</td><td>${esc(r.t)}</td><td>${r.s}/${r.m}</td><td>${esc((r.w||[]).join(" · "))}</td></tr>`).join("")}</table></div>`:"")}
+};
+function render(){$("app").innerHTML=V[S.v]();window.scrollTo(0,0)}
+function go(v){S.v=v;S.msg="";render()}
+function types(){return["mc","tf","wr","ma"].filter(k=>$("ty_"+k).checked)}
+async function A(a,x){
+ if(a==="home"){cur=null;S.out="";go("home")}
+ else if(a==="new"){const n=$("np").value.trim();if(!n)return;P.push({id:uid(),name:n,cards:[]});save();render()}
+ else if(a==="open"){cur=P.find(p=>p.id===x);S.out="";S.link="";go("project")}
+ else if(a==="del"){S.cd=x;render()}
+ else if(a==="delno"){S.cd="";render()}
+ else if(a==="delok"){P=P.filter(p=>p.id!==x);S.cd="";save();render()}
+ else if(a==="restore"){try{const o=await unpack($("rs").value.trim());P.push({id:uid(),name:o.name,cards:dec(o.cards)});save();S.msg="";render()}catch(e){S.msg="That backup code could not be read.";render()}}
+ else if(a==="bk"){S.out=await pack({name:cur.name,cards:enc(cur.cards)});render()}
+ else if(a==="paste"){addRows(parsePaste($("pt").value))}
+ else if(a==="one"){addRows([[$("t1").value,$("d1").value]])}
+ else if(a==="rm"){cur.cards.splice(x,1);save();render()}
+ else if(a==="file"){const f=x.files[0];if(!f)return;if(typeof XLSX==="undefined"){S.msg="The Excel reader did not load. Paste rows instead.";return render()}
+  const rd=new FileReader();rd.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:"array"});addRows(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:""}))}catch(er){S.msg="Could not read that file.";render()}};rd.readAsArrayBuffer(f)}
+ else if(a==="study"){S.ord=sh(cur.cards);S.i=0;S.fl=false;S.rev=false;if(!S.ord.length){S.msg="Add some cards first.";return render()}go("study")}
+ else if(a==="flip"){S.fl=!S.fl;render()}
+ else if(a==="next"){S.i=(S.i+1)%S.ord.length;S.fl=false;render()}
+ else if(a==="prev"){S.i=(S.i-1+S.ord.length)%S.ord.length;S.fl=false;render()}
+ else if(a==="shuf"){S.ord=sh(S.ord);S.i=0;S.fl=false;render()}
+ else if(a==="rev"){S.rev=!S.rev;S.fl=false;render()}
+ else if(a==="setup"){if(!cur.cards.length){S.msg="Add some cards first.";return render()}S.mode=x;go("setup")}
+ else if(a==="go"){S.qs=build(cur.cards,types(),+$("nq").value||10);S.redo=null;go("quiz")}
+ else if(a==="mk"){const t=types();S.base=$("bl").value.trim().split("#")[0];
+  const tok=await pack({n:$("ti").value.trim()||cur.name,c:enc(cur.cards),y:t,m:Math.min(+$("nq").value||10,cur.cards.length)});
+  S.link=(S.base||"[paste this app’s link here]")+"#"+tok;const lk=$("lk");lk.innerHTML=`<p><b>Send this link to students:</b></p><textarea rows=4 readonly onclick="this.select()">${esc(S.link)}</textarea>`;lk.querySelector("textarea").select()}
+ else if(a==="stuGo"){S.name=$("nm").value.trim()||"Student";S.qs=build(dec(A0.c),A0.y,A0.m);S.redo=null;go("quiz")}
+ else if(a==="stuHome"){go("stuHome")}
+ else if(a==="submit"){const L=S.redo?S.redo.map(i=>S.qs[i]):S.qs;L.forEach(grade);S.redo=null;go("res")}
+ else if(a==="redo"){S.redo=[x];go("quiz")}
+ else if(a==="redoAll"){S.redo=S.qs.map((q,i)=>q.ok?-1:i).filter(i=>i>=0);go("quiz")}
+ else if(a==="check"){S.rows=null;go("check")}
+ else if(a==="readCodes"){const out=[];for(const l of $("cd").value.split(/\s+/).filter(Boolean)){try{out.push(await unpack(l))}catch(e){}}S.rows=out;render()}
+}
+(async()=>{const h=location.hash.slice(1);if(h){try{A0=await unpack(h);S={v:"stuHome"}}catch(e){}}render()})();
+</script></body></html>
